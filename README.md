@@ -1,1 +1,1 @@
-# COMP-4990-MARL-Traffic-System
+MARL-Traffic-System
