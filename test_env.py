@@ -11,8 +11,8 @@ obs, info = env.reset(seed=0)
 
 try:
     while True:
-        env.render(mode="human")              # 3D window
-        actions = env.action_space.sample()   # correct multi-agent action dict
+        env.render(mode="human")            
+        actions = env.action_space.sample()  
         obs, rew, term, trunc, info = env.step(actions)
 
         if term.get("__all__", False) or trunc.get("__all__", False):
