@@ -44,7 +44,7 @@ def build_algo_config(args: argparse.Namespace) -> PPOConfig:
         PPOConfig()
         .environment(env="metadrive_roundabout", env_config=env_config)
         .framework("torch")
-        .env_runners(num_rollout_workers=args.workers)
+        .env_runners(num_env_runners=args.workers)
         .training(train_batch_size=args.train_batch_size)
         .multi_agent(
             policies=policies,
