@@ -42,6 +42,10 @@ def build_algo_config(args: argparse.Namespace) -> PPOConfig:
 
     return (
         PPOConfig()
+        .api_stack(
+            enable_rl_module_and_learner=False,
+            enable_env_runner_and_connector_v2=False,
+        )
         .environment(env="metadrive_roundabout", env_config=env_config)
         .framework("torch")
         .env_runners(num_env_runners=args.workers)
