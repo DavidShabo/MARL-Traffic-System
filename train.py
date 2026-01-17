@@ -1,6 +1,7 @@
 """RLlib training entry point for MetaDrive MultiAgentRoundaboutEnv."""
 
 from __future__ import annotations
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
 
 import argparse
 
@@ -9,6 +10,36 @@ from metadrive import MultiAgentRoundaboutEnv
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.tune.registry import register_env
 
+
+
+
+class RLLibMetaDriveRoundabout(MultiAgentEnv):
+    def __init__(self, config):
+        self.env = MultiAgentRoundaboutEnv(config)
+        # shared spaces
+        self.observation_space = self.env.observation_space
+        self.action_space = self.env.action_space
+
+    def reset(self, *, seed=None, options=None):
+        obs, info = self.env.reset(seed=seed)
+        return obs, info  # old RLlib stack expects obs only
+
+    def step(self, action_dict):
+        obs, rew, term, trunc, info = self.env.step(action_dict)
+
+    # Ensure required "__all__" keys exist
+        if "__all__" not in term:
+            term["__all__"] = all(term.get(a, False) for a in obs.keys())
+        if "__all__" not in trunc:
+            trunc["__all__"] = all(trunc.get(a, False) for a in obs.keys())
+
+        return obs, rew, term, trunc, info
+
+    def render(self, *args, **kwargs):
+        return self.env.render(*args, **kwargs)
+
+    def close(self):
+        return self.env.close()
 
 def build_env_config(num_agents: int, use_render: bool) -> dict:
     return {
@@ -19,17 +50,29 @@ def build_env_config(num_agents: int, use_render: bool) -> dict:
     }
 
 
-def make_env(config: dict) -> MultiAgentRoundaboutEnv:
-    return MultiAgentRoundaboutEnv(config)
-
+def make_env(config: dict):
+    return RLLibMetaDriveRoundabout(config)
 
 def build_algo_config(args: argparse.Namespace) -> PPOConfig:
     env_config = build_env_config(args.num_agents, args.render)
 
-    dummy_env = MultiAgentRoundaboutEnv(env_config)
-    obs_space = dummy_env.observation_space
-    act_space = dummy_env.action_space
-    dummy_env.close()
+    dummy = MultiAgentRoundaboutEnv(env_config)
+
+    obs_space = dummy.observation_space
+    act_space = dummy.action_space
+
+    # If MetaDrive exposes Dict spaces keyed by agent ids, grab one agent's space
+    try:
+    # Gymnasium Dict space supports .spaces
+     if hasattr(obs_space, "spaces"):
+        obs_space = list(obs_space.spaces.values())[0]
+        if hasattr(act_space, "spaces"):
+            act_space = list(act_space.spaces.values())[0]
+    except Exception:
+       pass
+
+    dummy.close()
+
 
     policies = {
         "shared_policy": (
@@ -52,7 +95,8 @@ def build_algo_config(args: argparse.Namespace) -> PPOConfig:
         .training(train_batch_size=args.train_batch_size)
         .multi_agent(
             policies=policies,
-            policy_mapping_fn=lambda *_: "shared_policy",
+            policy_mapping_fn=lambda agent_id, *args, **kwargs: "shared_policy",
+
         )
         .resources(num_gpus=args.gpus)
     )
