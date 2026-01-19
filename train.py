@@ -127,6 +127,7 @@ def main() -> None:
         length = results.get("episode_len_mean")
         print(f"iter={it} reward_mean={reward} len_mean={length}")
 
+    print("ABOUT TO SAVE CHECKPOINT...")
     checkpoint = algo.save()
     print(f"Checkpoint saved to: {checkpoint}")
 
