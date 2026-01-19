@@ -3,7 +3,8 @@ import ray
 from ray.rllib.algorithms.ppo import PPO
 from ray.tune.registry import register_env
 
-from train import make_env  # reuse your env factory
+from train import make_env  
+from envs import build_env_config, make_env
 
 
 def main(checkpoint_path):

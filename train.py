@@ -1,80 +1,58 @@
-"""RLlib training entry point for MetaDrive MultiAgentRoundaboutEnv."""
+"""RLlib training entry point for MetaDrive MultiAgentRoundaboutEnv (compat mode)."""
 
 from __future__ import annotations
-from ray.rllib.env.multi_agent_env import MultiAgentEnv
 
 import argparse
+import os
+from typing import Any
+
 import ray
 from metadrive import MultiAgentRoundaboutEnv
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.tune.registry import register_env
+from envs import build_env_config, make_env
+
+def _first_space(space: Any):
+    """If Gymnasium Dict space, return the first sub-space; else return as-is."""
+    if hasattr(space, "spaces") and isinstance(space.spaces, dict) and len(space.spaces) > 0:
+        return next(iter(space.spaces.values()))
+    return space
 
 
+def _ckpt_path_str(ckpt_obj: Any) -> str:
+    """
+    RLlib/Ray versions vary: save() may return a string path, a Checkpoint,
+    or a TrainingResult that contains a Checkpoint.
+    This extracts a usable path string robustly.
+    """
+    if isinstance(ckpt_obj, str):
+        return ckpt_obj
 
+    # Try ckpt_obj.path
+    if hasattr(ckpt_obj, "path") and isinstance(getattr(ckpt_obj, "path"), str):
+        return ckpt_obj.path
 
-class RLLibMetaDriveRoundabout(MultiAgentEnv):
-    def __init__(self, config):
-        self.env = MultiAgentRoundaboutEnv(config)
-        self.observation_space = self.env.observation_space
-        self.action_space = self.env.action_space
+    # Try ckpt_obj.checkpoint.path (TrainingResult(checkpoint=Checkpoint(...)))
+    if hasattr(ckpt_obj, "checkpoint"):
+        cp = getattr(ckpt_obj, "checkpoint")
+        if hasattr(cp, "path") and isinstance(getattr(cp, "path"), str):
+            return cp.path
 
-    def reset(self, *, seed=None, options=None):
-        obs, info = self.env.reset(seed=seed)
-        return obs, info  # old RLlib stack expects obs only
+    return str(ckpt_obj)
 
-    def step(self, action_dict):
-        obs, rew, term, trunc, info = self.env.step(action_dict)
-
-    # Ensure required "__all__" keys exist
-        if "__all__" not in term:
-            term["__all__"] = all(term.get(a, False) for a in obs.keys())
-        if "__all__" not in trunc:
-            trunc["__all__"] = all(trunc.get(a, False) for a in obs.keys())
-
-        return obs, rew, term, trunc, info
-
-    def render(self, *args, **kwargs):
-        return self.env.render(*args, **kwargs)
-
-    def close(self):
-        return self.env.close()
-
-def build_env_config(num_agents: int, use_render: bool):
-    return {
-        "use_render": use_render,
-        "manual_control": False,
-        "log_level": 50,
-        "num_agents": num_agents,
-    }
-
-
-def make_env(config):
-    return RLLibMetaDriveRoundabout(config)
 
 def build_algo_config(args: argparse.Namespace) -> PPOConfig:
     env_config = build_env_config(args.num_agents, args.render)
 
+    # Dummy env to read spaces (MetaDrive sometimes exposes Dict spaces)
     dummy = MultiAgentRoundaboutEnv(env_config)
-
-    obs_space = dummy.observation_space
-    act_space = dummy.action_space
-
-    # If MetaDrive exposes Dict spaces keyed by agent ids, grab one agent's space
-    try:
-    # Gymnasium Dict space supports .spaces
-     if hasattr(obs_space, "spaces"):
-        obs_space = list(obs_space.spaces.values())[0]
-        if hasattr(act_space, "spaces"):
-            act_space = list(act_space.spaces.values())[0]
-    except Exception:
-       pass
-
+    obs_space = _first_space(dummy.observation_space)
+    act_space = _first_space(dummy.action_space)
     dummy.close()
-
 
     policies = {
         "shared_policy": (
-            None,      
+            None,       # RLlib builds default PPO torch policy
             obs_space,
             act_space,
             {},
@@ -83,18 +61,19 @@ def build_algo_config(args: argparse.Namespace) -> PPOConfig:
 
     return (
         PPOConfig()
+        # Keep compatibility (old RLlib API stack)
         .api_stack(
             enable_rl_module_and_learner=False,
             enable_env_runner_and_connector_v2=False,
         )
         .environment(env="metadrive_roundabout", env_config=env_config)
         .framework("torch")
+        # Old stack but using new config name (you already migrated off .rollouts)
         .env_runners(num_env_runners=args.workers)
         .training(train_batch_size=args.train_batch_size)
         .multi_agent(
             policies=policies,
-            policy_mapping_fn=lambda agent_id, *args, **kwargs: "shared_policy",
-
+            policy_mapping_fn=lambda agent_id, *a, **k: "shared_policy",
         )
         .resources(num_gpus=args.gpus)
     )
@@ -108,6 +87,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--train-batch-size", type=int, default=4000)
     p.add_argument("--stop-iters", type=int, default=50)
     p.add_argument("--render", action="store_true")
+
+    # New: stable checkpoint dir (prevents temp-path saves)
+    p.add_argument("--checkpoint-dir", type=str, default="checkpoints")
+
     return p.parse_args()
 
 
@@ -123,13 +106,24 @@ def main() -> None:
 
     for it in range(1, args.stop_iters + 1):
         results = algo.train()
-        reward = results.get("episode_reward_mean")
-        length = results.get("episode_len_mean")
-        print(f"iter={it} reward_mean={reward} len_mean={length}")
 
+        er = None
+        el = None
+        try:
+            er = results["env_runners"]["episode_reward_mean"]
+            el = results["env_runners"]["episode_len_mean"]
+        except Exception:
+
+            er = results.get("episode_reward_mean")
+            el = results.get("episode_len_mean")
+
+        print(f"iter={it} reward_mean={er} len_mean={el}")
+
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
     print("ABOUT TO SAVE CHECKPOINT...")
-    checkpoint = algo.save()
-    print(f"Checkpoint saved to: {checkpoint}")
+    ckpt_obj = algo.save(args.checkpoint_dir)
+    ckpt_path = _ckpt_path_str(ckpt_obj)
+    print(f"Checkpoint saved to: {ckpt_path}")
 
     algo.stop()
     ray.shutdown()
