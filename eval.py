@@ -4,7 +4,7 @@ from ray.rllib.algorithms.ppo import PPO
 from ray.tune.registry import register_env
 
 from train import make_env  
-from envs import build_env_config, make_env
+from envs.env import make_env
 
 
 def main(checkpoint_path):
