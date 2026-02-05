@@ -70,7 +70,15 @@ def build_algo_config(args: argparse.Namespace) -> PPOConfig:
         .framework("torch")
         # Old stack but using new config name (you already migrated off .rollouts)
         .env_runners(num_env_runners=args.workers)
-        .training(train_batch_size=args.train_batch_size, clip_gradients=1.0)
+        .training(
+            train_batch_size=args.train_batch_size,
+            lr=1e-4,
+            gamma=0.99,
+            use_critic=True,
+            use_gae=True,
+            lambda_=0.95,
+            entropy_coeff=0.0,
+        )
         .multi_agent(
             policies=policies,
             policy_mapping_fn=lambda agent_id, *a, **k: "shared_policy",
@@ -107,15 +115,27 @@ def main() -> None:
     for it in range(1, args.stop_iters + 1):
         results = algo.train()
 
+        # Try to extract reward/length metrics from various possible locations
         er = None
         el = None
+        
         try:
-            er = results["env_runners"]["episode_reward_mean"]
-            el = results["env_runners"]["episode_len_mean"]
+            # Try multi-agent multi-worker format
+            if "env_runners" in results:
+                metrics = results.get("env_runners", {}).get("episode", {})
+                er = metrics.get("mean_reward")
+                el = metrics.get("mean_length")
         except Exception:
-
+            pass
+        
+        if er is None:
+            # Try alternative locations
             er = results.get("episode_reward_mean")
             el = results.get("episode_len_mean")
+        
+        if er is None:
+            er = results.get("custom_metrics", {}).get("episode_reward_mean")
+            el = results.get("custom_metrics", {}).get("episode_len_mean")
 
         print(f"iter={it} reward_mean={er} len_mean={el}")
 

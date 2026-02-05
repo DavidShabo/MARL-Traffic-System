@@ -1,19 +1,32 @@
 import argparse
+from pathlib import Path
+
 import ray
 from ray.rllib.algorithms.ppo import PPO
 from ray.tune.registry import register_env
 
-# from envs import make_env
+from envs import make_env
 
-from train import make_env  
-from envs import build_env_config, make_env
+
+def _resolve_checkpoint_path(checkpoint_path: str) -> str:
+    path = Path(checkpoint_path).expanduser().resolve()
+
+    if path.is_dir():
+        if (path / "rllib_checkpoint.json").exists():
+            return str(path)
+
+    if path.is_file() and path.name == "rllib_checkpoint.json":
+        return str(path.parent)
+
+    return str(path)
+
 
 def main(checkpoint_path):
     register_env("metadrive_roundabout", make_env)
 
     ray.init(ignore_reinit_error=True)
 
-    algo = PPO.from_checkpoint(checkpoint_path)
+    algo = PPO.from_checkpoint(_resolve_checkpoint_path(checkpoint_path))
 
     env = make_env({
         "use_render": True,
