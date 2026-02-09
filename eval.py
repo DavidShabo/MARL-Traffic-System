@@ -21,7 +21,7 @@ def _resolve_checkpoint_path(checkpoint_path: str) -> str:
     return str(path)
 
 
-def main(checkpoint_path):
+def main(checkpoint_path: str, num_agents: int, explore: bool) -> None:
     register_env("metadrive_roundabout", make_env)
 
     ray.init(ignore_reinit_error=True)
@@ -32,7 +32,7 @@ def main(checkpoint_path):
         "use_render": True,
         "manual_control": False,
         "log_level": 50,
-        "num_agents": 8,
+        "num_agents": num_agents,
     })
 
     obs, info = env.reset()
@@ -43,7 +43,7 @@ def main(checkpoint_path):
             actions[agent_id] = algo.compute_single_action(
                 agent_obs,
                 policy_id="shared_policy",
-                explore=False,
+                explore=explore,
             )
 
         obs, rew, term, trunc, info = env.step(actions)
@@ -56,5 +56,12 @@ def main(checkpoint_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--num-agents", type=int, default=8)
+    parser.add_argument(
+        "--explore",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable exploration for more stochastic actions (helps movement if policy is undertrained).",
+    )
     args = parser.parse_args()
-    main(args.checkpoint)
+    main(args.checkpoint, args.num_agents, args.explore)

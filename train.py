@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from typing import Any
+from typing import Any, Optional, Tuple
 
 import ray
 from metadrive import MultiAgentRoundaboutEnv
@@ -102,40 +102,71 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _extract_metrics(results: dict) -> Tuple[Optional[float], Optional[float]]:
+    er = None
+    el = None
+
+    # Newer RLlib structure
+    env_runners = results.get("env_runners")
+    if isinstance(env_runners, dict):
+        episode = env_runners.get("episode")
+        if isinstance(episode, dict):
+            er = episode.get("mean_reward")
+            el = episode.get("mean_length")
+
+    # Older structure
+    if er is None:
+        er = results.get("episode_reward_mean")
+        el = results.get("episode_len_mean")
+
+    # Old API stack: sampler_results
+    if er is None:
+        sampler = results.get("sampler_results")
+        if isinstance(sampler, dict):
+            er = sampler.get("episode_reward_mean")
+            el = sampler.get("episode_len_mean")
+            if er is None:
+                hist = sampler.get("hist_stats", {})
+                rewards = hist.get("episode_reward") or hist.get("episode_rewards")
+                lengths = hist.get("episode_lengths")
+                if rewards:
+                    er = float(sum(rewards) / max(1, len(rewards)))
+                if lengths:
+                    el = float(sum(lengths) / max(1, len(lengths)))
+
+    # Fallback: compute from hist_stats if available
+    if er is None:
+        hist = results.get("hist_stats", {})
+        rewards = hist.get("episode_reward") or hist.get("episode_rewards")
+        lengths = hist.get("episode_lengths")
+        if rewards:
+            er = float(sum(rewards) / max(1, len(rewards)))
+        if lengths:
+            el = float(sum(lengths) / max(1, len(lengths)))
+
+    return er, el
+
+
 def main() -> None:
     print("TRAIN.PY STARTED")
 
     args = parse_args()
     register_env("metadrive_roundabout", make_env)
 
-    ray.init(ignore_reinit_error=True)
+    os.environ.setdefault("RAY_DISABLE_METRICS_EXPORT", "1")
+    os.environ.setdefault("RAY_METRICS_EXPORT_PORT", "0")
+    ray.init(ignore_reinit_error=True, include_dashboard=False, _metrics_export_port=0)
 
-    algo = build_algo_config(args).build()
+    algo_config = build_algo_config(args)
+    if hasattr(algo_config, "build_algo"):
+        algo = algo_config.build_algo()
+    else:
+        algo = algo_config.build()
 
     for it in range(1, args.stop_iters + 1):
         results = algo.train()
 
-        # Try to extract reward/length metrics from various possible locations
-        er = None
-        el = None
-        
-        try:
-            # Try multi-agent multi-worker format
-            if "env_runners" in results:
-                metrics = results.get("env_runners", {}).get("episode", {})
-                er = metrics.get("mean_reward")
-                el = metrics.get("mean_length")
-        except Exception:
-            pass
-        
-        if er is None:
-            # Try alternative locations
-            er = results.get("episode_reward_mean")
-            el = results.get("episode_len_mean")
-        
-        if er is None:
-            er = results.get("custom_metrics", {}).get("episode_reward_mean")
-            el = results.get("custom_metrics", {}).get("episode_len_mean")
+        er, el = _extract_metrics(results)
 
         print(f"iter={it} reward_mean={er} len_mean={el}")
 
