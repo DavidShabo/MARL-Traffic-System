@@ -19,6 +19,8 @@ def _resolve_checkpoint_path(checkpoint_path: str) -> str:
         return str(path.parent)
 
     return str(path)
+from train import make_env  
+from envs.env import make_env
 
 
 def main(checkpoint_path: str, num_agents: int, explore: bool) -> None:
@@ -65,3 +67,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     main(args.checkpoint, args.num_agents, args.explore)
+    main(args.checkpoint)
