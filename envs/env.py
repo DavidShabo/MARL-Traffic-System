@@ -4,13 +4,16 @@ import numpy as np
 
 class RLLibMetaDriveRoundabout(MultiAgentEnv):
     def __init__(self, config: dict):
+        # Wrap the MetaDrive roundabout so RLlib can interact with it
         self.env = MultiAgentRoundaboutEnv(config)
         self.observation_space = self.env.observation_space
         self.action_space = self.env.action_space
+        # Track previous distances to compute progress reward
         self.prev_distances = {}  # Track previous distances for progress reward
 
     def _normalize_obs(self, obs_dict):
         """Normalize and clip observations to prevent NaN."""
+        # RLlib can break if observations contain NaN/inf
         normalized = {}
         for agent_id, obs in obs_dict.items():
             if isinstance(obs, np.ndarray):
@@ -22,11 +25,13 @@ class RLLibMetaDriveRoundabout(MultiAgentEnv):
         return normalized
 
     def reset(self, *, seed=None, options=None):
+        # Reset the environment and sanitize observations
         obs, info = self.env.reset(seed=seed)
         obs = self._normalize_obs(obs)
         return obs, info
 
     def step(self, action_dict):
+        # Step the simulator with the actions chosen by agents
         obs, rew, term, trunc, info = self.env.step(action_dict)
         obs = self._normalize_obs(obs)
 
@@ -75,7 +80,7 @@ class RLLibMetaDriveRoundabout(MultiAgentEnv):
             if not agent_info.get('out_of_road', False) and velocity > 0.1:
                 reward += 0.005  # Small bonus for lane keeping
 
-            # Clip final reward
+            # Clip final reward to keep training stable
             reward = float(np.clip(reward, -10, 10))
             custom_rew[agent_id] = reward
 
@@ -92,20 +97,25 @@ class RLLibMetaDriveRoundabout(MultiAgentEnv):
         return obs, custom_rew, term, trunc, info
 
     def render(self, *args, **kwargs):
+        # Render the simulator (only if enabled)
         return self.env.render(*args, **kwargs)
 
     def close(self):
+        # Clean up simulator resources
         return self.env.close()
 
 
 def build_env_config(num_agents: int, render: bool) -> dict:
+    # Config controls environment behavior (agents, rendering, logging)
     return {
         "use_render": render,
         "manual_control": False,
         "log_level": 50,
         "num_agents": num_agents,
+        "horizon": 100,  # Reduced to ensure episodes finish within batch
     }
 
 
 def make_env(config: dict):
+    # Factory function for RLlib registration
     return RLLibMetaDriveRoundabout(config)
