@@ -8,6 +8,7 @@ metadrive_env/
 metadrive_env_/
 .venv/
 env/
+venv/
 
 # VS Code
 .vscode/
