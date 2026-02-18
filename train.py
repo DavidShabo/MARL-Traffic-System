@@ -32,7 +32,6 @@ def _ckpt_path_str(ckpt_obj: Any) -> str:
     if hasattr(ckpt_obj, "path") and isinstance(getattr(ckpt_obj, "path"), str):
         return ckpt_obj.path
 
-    # Try ckpt_obj.checkpoint.path (TrainingResult(checkpoint=Checkpoint(...)))
     if hasattr(ckpt_obj, "checkpoint"):
         cp = getattr(ckpt_obj, "checkpoint")
         if hasattr(cp, "path") and isinstance(getattr(cp, "path"), str):
@@ -44,7 +43,6 @@ def _ckpt_path_str(ckpt_obj: Any) -> str:
 def build_algo_config(args: argparse.Namespace) -> PPOConfig:
     env_config = build_env_config(args.num_agents, args.render)
 
-    # Dummy env to read spaces (MetaDrive sometimes exposes Dict spaces)
     dummy = MultiAgentRoundaboutEnv(env_config)
     obs_space = _first_space(dummy.observation_space)
     act_space = _first_space(dummy.action_space)
@@ -61,14 +59,12 @@ def build_algo_config(args: argparse.Namespace) -> PPOConfig:
 
     return (
         PPOConfig()
-        # Keep compatibility (old RLlib API stack)
         .api_stack(
             enable_rl_module_and_learner=False,
             enable_env_runner_and_connector_v2=False,
         )
         .environment(env="metadrive_roundabout", env_config=env_config)
         .framework("torch")
-        # Old stack but using new config name (you already migrated off .rollouts)
         .env_runners(num_env_runners=args.workers)
         .training(train_batch_size=args.train_batch_size)
         .multi_agent(
@@ -88,7 +84,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--stop-iters", type=int, default=50)
     p.add_argument("--render", action="store_true")
 
-    # New: stable checkpoint dir (prevents temp-path saves)
     p.add_argument("--checkpoint-dir", type=str, default="checkpoints")
 
     return p.parse_args()
