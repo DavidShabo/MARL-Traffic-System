@@ -17,20 +17,23 @@ class RLLibMetaDriveRoundabout(MultiAgentEnv):
         for agent_id in obs.keys():
             ainfo = info.get(agent_id, {})
             r = 0.0
+            v = ainfo.get("velocity", 0.0)
+
+            if isinstance(v, (list, tuple)):
+                    v = v[0]
+            v = float(np.clip(np.nan_to_num(v, nan=0.0, posinf=20.0, neginf=0.0), 0.0, 20.0))
 
             if ainfo.get("crash", False):
                 r -= 10.0
             if ainfo.get("out_of_road", False):
                 r -= 5.0
+            #dont let them just stand still for points
+            if v > 0.5:
+                r += 0.01
+            else:
+                r -= 0.02
 
-            r += 0.01
-
-            v = ainfo.get("velocity", 0.0)
-            if isinstance(v, (list, tuple)):
-                v = v[0]
-            v = float(np.clip(np.nan_to_num(v, nan=0.0, posinf=20.0, neginf=0.0), 0.0, 20.0))
-
-            target = 8.0
+            target = 12.0
             r += max(0.0, 1.0 - abs(v - target) / target) * 0.02
 
             if not ainfo.get("out_of_road", False) and v > 0.1:
