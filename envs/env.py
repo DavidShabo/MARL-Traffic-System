@@ -46,24 +46,28 @@ class RLLibMetaDriveRoundabout(MultiAgentEnv):
             if agent_info.get("arrive_dest", False):
                 reward += 20.0
 
-            ### 3. SPEED CONTROL - Slow when turning, faster on straights
+            ### 3. SPEED & STEERING CONTROL - Slow in real turns, penalize zigzag
             velocity = float(agent_info.get("velocity", 0.0))
-            steering = abs(float(agent_info.get("steering", 0.0)))
-            
-            # Define speed targets based on steering (turning vs straight)
-            if steering > 0.3:  # Turning (high steering angle)
-                target_speed = 4.0  # m/s (~14 km/h) - slow for turns
+            steering = float(agent_info.get("steering", 0.0))
+            abs_steering = abs(steering)
+
+            # Penalize unnecessary steering (zigzag) always
+            reward -= 0.2 * abs_steering  # Small penalty for any steering
+
+            # Only reward turn speed if actually turning significantly
+            if abs_steering > 0.3:  # True turning
+                target_speed = 4.0
                 if velocity > target_speed:
-                    reward -= 0.5 * (velocity - target_speed)  # Penalize speeding in turns
+                    reward -= 0.5 * (velocity - target_speed)
                 elif velocity > 2.0:
-                    reward += 0.2  # Reward appropriate turn speed
-            else:  # Straight driving (low steering)
-                target_speed = 10.0  # m/s (~36 km/h) - normal speed
+                    reward += 0.2
+            else:  # Straight driving
+                target_speed = 10.0
                 if velocity > target_speed:
-                    reward -= 0.3 * (velocity - target_speed)  # Penalize excessive speeding
+                    reward -= 0.3 * (velocity - target_speed)
                 elif velocity >= 6.0:
-                    reward += 0.3  # Reward good straight-line speed
-            
+                    reward += 0.3
+
             # Always penalize complete stops (blocking traffic)
             if velocity < 0.5:
                 reward -= 0.15
