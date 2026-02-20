@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 from typing import Any
 
 import ray
@@ -11,6 +12,17 @@ from metadrive import MultiAgentRoundaboutEnv
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.tune.registry import register_env
 from envs import build_env_config, make_env
+
+# Global flag for graceful shutdown
+_stop_training = False
+
+
+def _signal_handler(signum, frame):
+    """Handle Ctrl+C to stop training gracefully."""
+    global _stop_training
+    print("\n⚠️  Interrupt received! Finishing current iteration and saving checkpoint...")
+    _stop_training = True
+
 
 def _first_space(space: Any):
     """If Gymnasium Dict space, return the first sub-space; else return as-is."""
@@ -66,7 +78,15 @@ def build_algo_config(args: argparse.Namespace) -> PPOConfig:
         .environment(env="metadrive_roundabout", env_config=env_config)
         .framework("torch")
         .env_runners(num_env_runners=args.workers)
-        .training(train_batch_size=args.train_batch_size)
+        .training(
+            train_batch_size=args.train_batch_size,
+            lr=0.0003,              # Learning rate (higher = faster but less stable)
+            gamma=0.99,             # Discount factor (0.99 is good for driving)
+            lambda_=0.95,           # GAE lambda (higher = less bias, more variance)
+            num_sgd_iter=10,        # SGD passes per batch (more = better use of data)
+            minibatch_size=512,     # Minibatch size (larger = faster GPU utilization)
+            entropy_coeff=0.01,     # Exploration bonus (higher = more exploration)
+        )
         .multi_agent(
             policies=policies,
             policy_mapping_fn=lambda agent_id, *a, **k: "shared_policy",
@@ -90,7 +110,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    global _stop_training
     print("TRAIN.PY STARTED")
+    print("💡 Press Ctrl+C at any time to stop and save checkpoint\n")
+
+    # Register signal handler for graceful shutdown
+    signal.signal(signal.SIGINT, _signal_handler)
 
     args = parse_args()
     register_env("metadrive_roundabout", make_env)
@@ -100,6 +125,10 @@ def main() -> None:
     algo = build_algo_config(args).build()
 
     for it in range(1, args.stop_iters + 1):
+        if _stop_training:
+            print(f"\n🛑 Stopping at iteration {it-1}")
+            break
+
         results = algo.train()
 
         er = None
