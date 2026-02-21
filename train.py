@@ -124,9 +124,6 @@ def main() -> None:
 
     algo = build_algo_config(args).build()
 
-    import datetime
-    os.makedirs(args.checkpoint_dir, exist_ok=True)
-    last_ckpt_path = None
     for it in range(1, args.stop_iters + 1):
         if _stop_training:
             print(f"\n🛑 Stopping at iteration {it-1}")
@@ -140,31 +137,17 @@ def main() -> None:
             er = results["env_runners"]["episode_reward_mean"]
             el = results["env_runners"]["episode_len_mean"]
         except Exception:
+
             er = results.get("episode_reward_mean")
             el = results.get("episode_len_mean")
 
         print(f"iter={it} reward_mean={er} len_mean={el}")
 
-        # Save a uniquely named checkpoint every iteration
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_ckpt_dir = os.path.join(args.checkpoint_dir, f"ckpt_iter{it}_{timestamp}")
-        os.makedirs(unique_ckpt_dir, exist_ok=True)
-        ckpt_obj = algo.save(unique_ckpt_dir)
-        ckpt_path = _ckpt_path_str(ckpt_obj)
-        print(f"Checkpoint saved to: {ckpt_path}")
-        last_ckpt_path = ckpt_path
-
-    # After training, also copy the last checkpoint to a 'final' uniquely named location
-    if last_ckpt_path:
-        final_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        final_ckpt_dir = os.path.join(args.checkpoint_dir, f"final_ckpt_{final_timestamp}")
-        os.makedirs(final_ckpt_dir, exist_ok=True)
-        import shutil
-        # Copy all files from last_ckpt_path's directory to final_ckpt_dir
-        src_dir = os.path.dirname(last_ckpt_path)
-        for fname in os.listdir(src_dir):
-            shutil.copy2(os.path.join(src_dir, fname), final_ckpt_dir)
-        print(f"Final checkpoint copied to: {final_ckpt_dir}")
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+    print("ABOUT TO SAVE CHECKPOINT...")
+    ckpt_obj = algo.save(args.checkpoint_dir)
+    ckpt_path = _ckpt_path_str(ckpt_obj)
+    print(f"Checkpoint saved to: {ckpt_path}")
 
     algo.stop()
     ray.shutdown()
