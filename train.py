@@ -13,12 +13,13 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.tune.registry import register_env
 from envs import build_env_config, make_env
 
-# Global flag for graceful shutdown
+
+
+
+
 _stop_training = False
 
-
 def _signal_handler(signum, frame):
-    """Handle Ctrl+C to stop training gracefully."""
     global _stop_training
     print("\n⚠️  Interrupt received! Finishing current iteration and saving checkpoint...")
     _stop_training = True
@@ -32,11 +33,7 @@ def _first_space(space: Any):
 
 
 def _ckpt_path_str(ckpt_obj: Any) -> str:
-    """
-    RLlib/Ray versions vary: save() may return a string path, a Checkpoint,
-    or a TrainingResult that contains a Checkpoint.
-    This extracts a usable path string robustly.
-    """
+   
     if isinstance(ckpt_obj, str):
         return ckpt_obj
 
@@ -54,15 +51,15 @@ def _ckpt_path_str(ckpt_obj: Any) -> str:
 
 def build_algo_config(args: argparse.Namespace) -> PPOConfig:
     env_config = build_env_config(args.num_agents, args.render)
-
-    dummy = MultiAgentRoundaboutEnv(env_config)
+    env_config["env_name"] = args.env    
+    dummy = make_env(env_config)
     obs_space = _first_space(dummy.observation_space)
     act_space = _first_space(dummy.action_space)
     dummy.close()
 
     policies = {
         "shared_policy": (
-            None,       # RLlib builds default PPO torch policy
+            None,      
             obs_space,
             act_space,
             {},
@@ -103,18 +100,25 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--train-batch-size", type=int, default=4000)
     p.add_argument("--stop-iters", type=int, default=50)
     p.add_argument("--render", action="store_true")
-
     p.add_argument("--checkpoint-dir", type=str, default="checkpoints")
+    p.add_argument(
+        "--env",
+        type=str,
+        default="roundabout",
+        choices=["roundabout", "intersection", "tollgate"],
+        help="Which MetaDrive map to use"
+    )
+    p.add_argument("--resume", type=str, default=None, help="Path to a checkpoint to resume from")
 
     return p.parse_args()
 
 
 def main() -> None:
     global _stop_training
+    
     print("TRAIN.PY STARTED")
     print("💡 Press Ctrl+C at any time to stop and save checkpoint\n")
 
-    # Register signal handler for graceful shutdown
     signal.signal(signal.SIGINT, _signal_handler)
 
     args = parse_args()
@@ -123,7 +127,9 @@ def main() -> None:
     ray.init(ignore_reinit_error=True)
 
     algo = build_algo_config(args).build()
-
+    if args.resume:
+        print(f"Restoring from checkpoint: {args.resume}")
+        algo.restore(args.resume)
     for it in range(1, args.stop_iters + 1):
         if _stop_training:
             print(f"\n🛑 Stopping at iteration {it-1}")
