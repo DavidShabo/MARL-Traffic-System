@@ -9,7 +9,7 @@ from typing import Any
 
 import ray
 from metadrive import MultiAgentRoundaboutEnv
-from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.algorithms.ppo import PPOConfig, PPO
 from ray.tune.registry import register_env
 from envs import build_env_config, make_env
 
@@ -50,8 +50,13 @@ def _ckpt_path_str(ckpt_obj: Any) -> str:
 
 
 def build_algo_config(args: argparse.Namespace) -> PPOConfig:
-    env_config = build_env_config(args.num_agents, args.render)
+    env_config = build_env_config(args.num_agents, args.render, stage=args.stage)    
     env_config["env_name"] = args.env    
+    print(
+        f"[CONFIG] stage={args.stage} env={args.env} "
+        f"horizon={env_config.get('horizon')} traffic_density={env_config.get('traffic_density')} "
+        f"traffic_mode={env_config.get('traffic_mode')}"
+    )
     dummy = make_env(env_config)
     obs_space = _first_space(dummy.observation_space)
     act_space = _first_space(dummy.action_space)
@@ -99,8 +104,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--gpus", type=int, default=0)
     p.add_argument("--train-batch-size", type=int, default=4000)
     p.add_argument("--stop-iters", type=int, default=50)
-    p.add_argument("--render", action="store_true")
     p.add_argument("--checkpoint-dir", type=str, default="checkpoints")
+    p.add_argument("--stage", type=int, default=1, choices=[1, 2, 3], help="Curriculum stage")
+    p.add_argument("--render", action="store_true", help="Render during training (slow)")
     p.add_argument(
         "--env",
         type=str,
@@ -127,9 +133,17 @@ def main() -> None:
     ray.init(ignore_reinit_error=True)
 
     algo = build_algo_config(args).build()
+
     if args.resume:
-        print(f"Restoring from checkpoint: {args.resume}")
-        algo.restore(args.resume)
+        resume_path = os.path.abspath(args.resume)
+        print(f"Loading policy weights from checkpoint: {resume_path}")
+
+        prev = PPO.from_checkpoint(resume_path)
+
+        w = prev.get_policy("shared_policy").get_weights()
+        algo.get_policy("shared_policy").set_weights(w)
+
+        prev.stop()
     for it in range(1, args.stop_iters + 1):
         if _stop_training:
             print(f"\n🛑 Stopping at iteration {it-1}")
