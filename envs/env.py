@@ -94,7 +94,7 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
 
             abs_steering = abs(steering)
 
-            reward -= 0.1 * abs_steering
+            reward -= 0.9 * abs_steering
 
             if abs_steering > 0.3:
 
