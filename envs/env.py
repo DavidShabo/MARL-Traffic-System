@@ -80,7 +80,7 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
 
             self._prev_progress[agent_id] = current_progress
 
-            reward += 6.0 * delta_progress
+            reward += 15.0 * delta_progress
 
             # 2. DESTINATION ARRIVAL
 
@@ -94,7 +94,7 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
 
             abs_steering = abs(steering)
 
-            reward -= 0.2 * abs_steering
+            reward -= 0.1 * abs_steering
 
             if abs_steering > 0.3:
 
@@ -123,8 +123,8 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
                 self._stall_steps[agent_id] = self._stall_steps.get(agent_id, 0) + 1
             else:
                 self._stall_steps[agent_id] = 0
-            if self._stall_steps[agent_id] > 15:
-                reward -= 0.05 * min(self._stall_steps[agent_id] - 15, 20)
+            if self._stall_steps[agent_id] > 8:
+                reward -= 0.05 * min(self._stall_steps[agent_id] - 8, 20)
 
                         # 4. LANE DISCIPLINE PENALTY
 
@@ -235,7 +235,7 @@ def build_env_config(num_agents: int, render: bool, stage: int = 1) -> dict:
             "random_lane_num": True,
             "random_agent_model": False,
             "traffic_density": 0.1,
-            "traffic_mode": "respawn",
+            "traffic_mode": "trigger",
             "allow_respawn": False,
             "horizon": 300,
         })
