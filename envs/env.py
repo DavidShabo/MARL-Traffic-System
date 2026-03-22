@@ -80,7 +80,7 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
 
             self._prev_progress[agent_id] = current_progress
 
-            reward += 15.0 * delta_progress
+            reward += 6.0 * delta_progress
 
             # 2. DESTINATION ARRIVAL
 
@@ -94,7 +94,7 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
 
             abs_steering = abs(steering)
 
-            reward -= 0.08 * abs_steering
+            reward -= 0.2 * abs_steering
 
             if abs_steering > 0.3:
 
@@ -123,16 +123,21 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
                 self._stall_steps[agent_id] = self._stall_steps.get(agent_id, 0) + 1
             else:
                 self._stall_steps[agent_id] = 0
-            if self._stall_steps[agent_id] > 8:
-                reward -= 0.05 * min(self._stall_steps[agent_id] - 8, 20)
+            if self._stall_steps[agent_id] > 15:
+                reward -= 0.05 * min(self._stall_steps[agent_id] - 15, 20)
+            # Allow short pauses for yielding/braking
+            if self._stall_steps[agent_id] > 15:
+                reward -= 0.05 * min(self._stall_steps[agent_id] - 15, 20)
 
-                        # 4. LANE DISCIPLINE PENALTY
-
+            # 4. LANE DISCIPLINE PENALTY
+            if agent_info.get("broken_white_line", False):
+                reward -= 3.0
 
             # 5. SAFETY PENALTIES
             if agent_info.get("crash", False):
                 reward -= 10.0
-
+            if agent_info.get("crash_sidewalk", False):
+                reward -= 2.0
             if agent_info.get("out_of_road", False):
                 reward -= 20.0
             
