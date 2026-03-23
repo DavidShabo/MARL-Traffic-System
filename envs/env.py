@@ -15,7 +15,7 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
 
     def __init__(self, config: dict):
         cfg = dict(config)
-
+        self._stall_steps = {}
         env_name = cfg.pop("env_name", "roundabout")
         env_cls = ENV_REGISTRY[env_name]
 
@@ -23,7 +23,6 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
         self._base_seed = int(cfg.pop("start_seed", 0))
 
         self.env = env_cls(cfg)
-        self._stall_steps = {}
 
         self.observation_space = self.env.observation_space
         self.action_space = self.env.action_space
@@ -40,16 +39,14 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
         base = int(getattr(self, "_base_seed", 0))
         idx = int(getattr(self, "_episode_idx", 0))
         n = int(getattr(self.env, "num_scenarios", 1000))
-        
+
         if seed is None:
             seed = (base + idx) % n
 
         self._episode_idx = idx + 1
 
         obs, info = self.env.reset(seed=seed)
-
         self._stall_steps = {}
-
         self._prev_progress = {}
         self._agent_ids = set(obs.keys())
 
@@ -68,7 +65,7 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
         for agent_id in obs.keys():
 
             agent_info = info.get(agent_id, {})
-            
+
             reward = 0.0
 
             # 1. PROGRESS TO DESTINATION
@@ -80,7 +77,7 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
 
             self._prev_progress[agent_id] = current_progress
 
-            reward += 6.0 * delta_progress
+            reward += 20.0 * delta_progress
 
             # 2. DESTINATION ARRIVAL
 
@@ -94,7 +91,7 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
 
             abs_steering = abs(steering)
 
-            reward -= 0.2 * abs_steering
+            reward -= 0.1 * abs_steering
 
             if abs_steering > 0.3:
 
@@ -115,7 +112,6 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
 
                 elif velocity >= 6.0:
                     reward += 0.3
-
             moving_threshold = 0.5
 
                 #penalize stalling and stopping mainly when not turning
@@ -123,24 +119,20 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
                 self._stall_steps[agent_id] = self._stall_steps.get(agent_id, 0) + 1
             else:
                 self._stall_steps[agent_id] = 0
-            if self._stall_steps[agent_id] > 15:
-                reward -= 0.05 * min(self._stall_steps[agent_id] - 15, 20)
-            # Allow short pauses for yielding/braking
-            if self._stall_steps[agent_id] > 15:
-                reward -= 0.05 * min(self._stall_steps[agent_id] - 15, 20)
+            if self._stall_steps[agent_id] > 20:
+                reward -= 5.0
 
-            # 4. LANE DISCIPLINE PENALTY
-            if agent_info.get("broken_white_line", False):
-                reward -= 3.0
+            # 4. SAFETY PENALTIES
 
-            # 5. SAFETY PENALTIES
             if agent_info.get("crash", False):
                 reward -= 10.0
             if agent_info.get("crash_sidewalk", False):
                 reward -= 2.0
+            if agent_info.get("road_line_broken_white", False):
+                reward -= 2.0
             if agent_info.get("out_of_road", False):
                 reward -= 20.0
-            
+
             # 5. COOPERATIVE BEHAVIOR
 
             if hasattr(self.env, "agents") and len(self.env.agents) > 1:
@@ -240,7 +232,7 @@ def build_env_config(num_agents: int, render: bool, stage: int = 1) -> dict:
             "random_lane_num": True,
             "random_agent_model": False,
             "traffic_density": 0.1,
-            "traffic_mode": "trigger",
+            "traffic_mode": "respawn",
             "allow_respawn": False,
             "horizon": 300,
         })
@@ -257,8 +249,7 @@ def build_env_config(num_agents: int, render: bool, stage: int = 1) -> dict:
             "horizon": 500,
         })
 
-    
     return base
 
 def make_env(config: dict):
-    return RLLibMetaDriveEnv(config)
+        return RLLibMetaDriveEnv(config)
