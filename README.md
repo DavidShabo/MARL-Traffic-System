@@ -13,7 +13,7 @@ We reccomend training the models in stages, with each stage having more randomiz
 
 
 STEP 1: activate your virtual env and run
-python train.py --stage 1 --env roundabout --num-agents 2 --workers 4 --train-batch-size 4000 --stop-iters 300
+python train.py --stage 1 --env roundabout --num-agents 2 --workers 4 --train-batch-size 4000 --stop-iters 150
 
 STEP 2: run                                                                                                         //whatever the path you have to checkpoints 
 python train.py --stage 2 --env roundabout --num-agents 4 --workers 6 --train-batch-size 8000 --stop-iters 300 --resume "C:\Code\MARL-Traffic-System\checkpoints"
