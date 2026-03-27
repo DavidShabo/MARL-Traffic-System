@@ -44,7 +44,7 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--num-agents", type=int, default=1)
     parser.add_argument("--env", type=str, default="roundabout",
-                        choices=["roundabout", "intersection", "tollgate"])
+                        choices=["roundabout", "intersection", "tollgate", "bottleneck", "pgmap"])
     parser.add_argument("--stage", type=int, default=3, choices=[1, 2, 3])  
     args = parser.parse_args()
 

@@ -111,7 +111,7 @@ def parse_args() -> argparse.Namespace:
         "--env",
         type=str,
         default="roundabout",
-        choices=["roundabout", "intersection", "tollgate"],
+        choices=["roundabout", "intersection", "tollgate", "bottleneck", "pgmap"],
         help="Which MetaDrive map to use"
     )
     p.add_argument("--resume", type=str, default=None, help="Path to a checkpoint to resume from")
@@ -123,7 +123,7 @@ def main() -> None:
     global _stop_training
     
     print("TRAIN.PY STARTED")
-    print("💡 Press Ctrl+C at any time to stop and save checkpoint\n")
+    print(" Press Ctrl+C at any time to stop and save checkpoint\n")
 
     signal.signal(signal.SIGINT, _signal_handler)
 
@@ -146,7 +146,7 @@ def main() -> None:
         prev.stop()
     for it in range(1, args.stop_iters + 1):
         if _stop_training:
-            print(f"\n🛑 Stopping at iteration {it-1}")
+            print(f"\n Stopping at iteration {it-1}")
             break
 
         results = algo.train()

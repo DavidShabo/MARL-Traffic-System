@@ -1,6 +1,6 @@
 import numpy as np
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
-from metadrive import MultiAgentRoundaboutEnv
+from metadrive import MultiAgentBottleneckEnv, MultiAgentRoundaboutEnv
 from metadrive import MultiAgentIntersectionEnv
 from metadrive import MultiAgentTollgateEnv
 
@@ -8,6 +8,7 @@ ENV_REGISTRY = {
     "roundabout": MultiAgentRoundaboutEnv,
     "intersection": MultiAgentIntersectionEnv,
     "tollgate": MultiAgentTollgateEnv,
+    "bottleneck": MultiAgentBottleneckEnv,  
 }
 
 
@@ -68,7 +69,7 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
             delta_progress = current_progress - prev_progress
             self._prev_progress[agent_id] = current_progress
 
-            reward += 10.0 * delta_progress
+            reward += 8.0 * delta_progress
 
             # 2. DESTINATION ARRIVAL
             if agent_info.get("arrive_dest", False):
@@ -80,7 +81,7 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
             abs_steering = abs(steering)
 
             # Smaller raw steering penalty
-            reward -= 0.08 * abs_steering
+            reward -= 0.4 * abs_steering
 
             # Penalize twitchy left-right steering changes
             prev_steer = self._prev_steer.get(agent_id, steering)
@@ -92,14 +93,16 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
                 target_speed = 4.0
                 if velocity > target_speed:
                     reward -= 0.25 * (velocity - target_speed)
-                elif velocity > 2.0:
+                elif velocity > 4.0:
+                    reward += 0.25
+                elif velocity > 3.0:
                     reward += 0.15
             else:
                 target_speed = 10.0
                 if velocity > target_speed:
                     reward -= 0.2 * (velocity - target_speed)
                 elif velocity >= 5.0:
-                    reward += 0.15
+                    reward += 0.25
 
             # 4. STALL PENALTY
 
@@ -110,17 +113,19 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
             else:
                 self._stall_steps[agent_id] = 0
 
-            if self._stall_steps[agent_id] > 6:
+            if self._stall_steps[agent_id] > 12:
                 reward -= 0.08 * min(self._stall_steps[agent_id] - 6, 20)
 
             # 5. SAFETY PENALTIES
             if agent_info.get("crash", False):
-                reward -= 20.0
+                reward -= 30.0
             if agent_info.get("crash_sidewalk", False):
-                reward -= 8.0
+                reward -= 3.0
+            if agent_info.get("road_line_solid_single_yellow", False):
+                reward -= 5.0
 
             if agent_info.get("out_of_road", False):
-                reward -= 30.0
+                reward -= 40.0
             speed = agent_info.get("velocity", 0.0)
             steer = abs(agent_info.get("steering", 0.0))
             reward -= 0.08 * speed * steer
@@ -139,12 +144,15 @@ class RLLibMetaDriveEnv(MultiAgentEnv):
                             min_distance = min(min_distance, distance)
 
                     if min_distance < 5.0:
-                        reward -= 0.5 * (5.0 - min_distance)
-
+                        reward -= 0.25 * (5.0 - min_distance)
+                    if min_distance < 3.0 and 0.5 < velocity < 3.0:
+                        reward -= 2.0 * (3.0 - min_distance)
+                    if min_distance < 3.0 and velocity < 0.5:
+                        reward += 0.3
                 except Exception:
                     pass
 
-            rewards_dict[agent_id] = float(np.clip(reward, -25.0, 25.0))
+            rewards_dict[agent_id] = float(np.clip(reward, -50.0, 50.0))
 
         return rewards_dict
 
@@ -213,7 +221,7 @@ def build_env_config(num_agents: int, render: bool, stage: int = 1) -> dict:
             "random_lane_width": True,
             "random_lane_num": True,
             "random_agent_model": False,
-            "traffic_density": 0.1,
+            "traffic_density": 0.2,
             "traffic_mode": "trigger",
             "allow_respawn": False,
             "horizon": 300,
@@ -223,8 +231,8 @@ def build_env_config(num_agents: int, render: bool, stage: int = 1) -> dict:
         base.update({
             "random_lane_width": True,
             "random_lane_num": True,
-            "random_agent_model": True,
-            "traffic_density": 0.2,
+            "random_agent_model": False,
+            "traffic_density": 0.3,
             "traffic_mode": "trigger",
             "allow_respawn": True,
             "horizon": 500,
