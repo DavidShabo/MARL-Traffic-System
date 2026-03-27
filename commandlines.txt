@@ -1,0 +1,21 @@
+**Linux/Ubuntu Single-Line Commands** (16 cores, GPU, optimized batch sizes):
+
+## Training (Copy-paste ready)
+
+**Stage 1**: `python train.py --stage 1 --env roundabout --num-agents 2 --workers 8 --gpus 1 --train-batch-size 8000 --stop-iters 300 --start-seed 0`
+
+**Stage 2**: `python train.py --stage 2 --env roundabout --num-agents 4 --workers 10 --gpus 1 --train-batch-size 12000 --stop-iters 300 --resume checkpoints --start-seed 0`
+
+**Stage 3**: `python train.py --stage 3 --env roundabout --num-agents 6 --workers 12 --gpus 1 --train-batch-size 16000 --stop-iters 400 --resume checkpoints --start-seed 0`
+
+## Evaluation
+
+**Stage 1**: `python eval.py --checkpoint checkpoints --num-agents 2 --env roundabout --stage 1`
+
+**Stage 2**: `python eval.py --checkpoint checkpoints --num-agents 4 --env roundabout --stage 2`
+
+**Stage 3**: `python eval.py --checkpoint checkpoints --num-agents 6 --env roundabout --stage 3`
+
+**Run after venv activation**: `source .venv/bin/activate` then copy-paste each line above.
+
+**`--start-seed 0`** fixes your scenario_index crash from logs. Checkpoints save to `./checkpoints/` automatically. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/156962582/69aa8f88-1ee7-4db7-9e15-d5be941ada84/train.py)

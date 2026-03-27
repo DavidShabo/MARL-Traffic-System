@@ -1,0 +1,179 @@
+Is there a feature from MetaDrive where agents can determine which side an object or another agent is close to them from? For example, can an agent know whether another agent or object is closely distanced to them from the front, behind, right, or left? If yes, can an agent behave differently in different situations, and what method(s) can an agent determine from which side another object or agent is on?
+
+----------------
+
+out_of_road   = agent_info.get("out_of_road", False)
+            on_solid_line = (
+                agent_info.get("on_yellow_continuous_line", False) or
+                agent_info.get("on_white_continuous_line",  False) or
+                agent_info.get("on_lane_line",              False)
+            )
+            boundary_hit = out_of_road or on_solid_line
+
+
+            if boundary_hit:
+                # Increment counter each step on boundary.
+                self._reverse_steps[agent_id] = self._reverse_steps.get(agent_id, 0) + 1
+            else:
+                # Cool down: one step off boundary reduces counter by 1.
+                # Agent must be clean for N steps before reversal mode clears.
+                self._reverse_steps[agent_id] = max(0, self._reverse_steps.get(agent_id, 0) - 1)
+
+Isn't this logic flawed because agents will get punished when turning to another road in the intersection?
+
+----------------
+
+Our project must implement cooperation between agents (because the project is called MARL for cooperative tasks). Does my program do that so far or not?
+
+----------------
+
+One problem I'm experiencing with my code is that the agents/cars don't slow down or stop when they're about to crash into another object or agent, and when that occurs, the agents/cars have to be able to move around the objects to their destination. How can I implement this feature? 
+
+----------------
+
+Are MetaDrive's observation and sensors features relevant to anything I mentioned? Yes or no? Below are the documentation pages of those features: 
+
+[https://metadrive-simulator.readthedocs.io/en/latest/obs.html](https://metadrive-simulator.readthedocs.io/en/latest/obs.html) 
+[https://metadrive-simulator.readthedocs.io/en/latest/sensors.html](https://metadrive-simulator.readthedocs.io/en/latest/sensors.html)
+
+
+----------------
+
+Give me the values I need to give the parameters in the python train.py command lines. Below is a README file relevant to training and running the program:
+
+// Below are the command lines needed to train and evaluate the code. We reccomend training the models in stages, with each stage having more randomization. For ex: the first stage is simple and just focuses on rewarding for driving, in the next stage it randomizes lane width, ect, and with stage 3 containing stages 2 randomness but with different acceleration,braking and more.
+--env can be changed with the following "roundabout" "intersection" "tollgate"
+STEP 1: activate your virtual env and run python train.py --stage 1 --env roundabout --num-agents 2 --workers 4 --train-batch-size 4000 --stop-iters 300
+STEP 2: run //whatever the path you have to checkpoints python train.py --stage 2 --env roundabout --num-agents 4 --workers 6 --train-batch-size 8000 --stop-iters 300 --resume "C:\\\\Code\\\\MARL-Traffic-System\\\\checkpoints"
+Step 3: run python train.py --stage 3 --env roundabout --num-agents 6 --workers 6 --train-batch-size 10000 --stop-iters 400 --resume "C:\\\\Code\\\\MARL-Traffic-System\\\\checkpoints"
+Step 4: evaluate... if you want to test a different stage, simply chage stage, either 1,2,3 python eval.py --checkpoint "C:\\\\Code\\\\MARL-Traffic-System\\\\checkpoints" --num-agents 2 --env roundabout --stage 3
+
+
+*** Side note: I can use my GPU and I have 16 cores
+
+----------------
+
+What are reward_mean and len_mean? Also, given that you've seen our program files so far, what metrics should I keep note of to determine how well our training model performs?
+
+----------------
+
+You are an expert in everything AI related, including machine and deep learning. Tell me all the ML and DL concepts I need to know to better understand the Cooperative Tasks MARL Traffic System.
+
+----------------
+
+How can I differentiate between agents and NPCs when running a checkpoint? Does MetaDrive provide built in labeling or anything like that?
+
+----------------
+
+Does MetaDrive provide a way for agents to know what type of road they're on? 
+
+
+
+Here are your **optimized, Linux/Ubuntu-compatible command lines** for training and evaluation. 
+
+**Key optimizations for your setup** (16 cores, GPU, keep `train_batch_size` reasonable):
+- `--gpus 1` (use your GPU).
+- `workers` = 8-12 (fits 16 cores, parallel envs).
+- `train_batch_size` = 8000-16000 (safe for GPU memory, scales with agents).
+- `--env roundabout` (as in README, good for progressive training).
+- `--checkpoint-dir checkpoints` (relative path, Linux standard).
+- **Progressive staging** as README recommends.
+- **Fixed seed issue** from your logs: added `--start-seed 1000` (see note below).
+
+**Run these in your project directory** after `source .venv/bin/activate` (or equivalent).
+
+## Training Commands (Stages 1-3)
+
+```bash
+# Stage 1: Basic driving (low agents, low randomization)
+python train.py \
+  --stage 1 \
+  --env roundabout \
+  --num-agents 2 \
+  --workers 8 \
+  --gpus 1 \
+  --train-batch-size 8000 \
+  --stop-iters 300
+
+# Stage 2: Add lane randomization (more agents)
+python train.py \
+  --stage 2 \
+  --env roundabout \
+  --num-agents 4 \
+  --workers 10 \
+  --gpus 1 \
+  --train-batch-size 12000 \
+  --stop-iters 300 \
+  --resume checkpoints \
+  --start-seed 1000
+
+# Stage 3: Full randomization (max agents)
+python train.py \
+  --stage 3 \
+  --env roundabout \
+  --num-agents 6 \
+  --workers 12 \
+  --gpus 1 \
+  --train-batch-size 16000 \
+  --stop-iters 400 \
+  --resume checkpoints \
+  --start-seed 1000
+```
+
+**Notes on values**:
+- **agents**: 2→4→6 (progressive complexity).
+- **workers**: 8→10→12 (leverage your 16 cores; each worker ~1-2 cores).
+- **batch_size**: 8k→12k→16k (not "too huge", scales with agents/workers).
+- **iters**: As README.
+- **resume**: `checkpoints` (latest auto-picks; full path if needed: `--resume ./checkpoints`).
+- **Linux paths**: No Windows backslashes; relative paths work. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/156962582/69aa8f88-1ee7-4db7-9e15-d5be941ada84/train.py)
+
+## Evaluation Commands
+
+```bash
+# Eval Stage 1 model (simple)
+python eval.py \
+  --checkpoint checkpoints \
+  --num-agents 2 \
+  --env roundabout \
+  --stage 1
+
+# Eval Stage 2 model
+python eval.py \
+  --checkpoint checkpoints \
+  --num-agents 4 \
+  --env roundabout \
+  --stage 2
+
+# Eval Stage 3 model (final)
+python eval.py \
+  --checkpoint checkpoints \
+  --num-agents 6 \
+  --env roundabout \
+  --stage 3
+```
+
+**Pro tip**: Add `--render` to `train.py` for Stage 3 if you want to watch: `python train.py ... --render`.
+
+***
+
+## 🚨 **Critical Fix for Your Seed/Crash Issue**
+
+Your training logs show repeated crashes:
+```
+AssertionError: scenario_index (seed) should be in [1000:2000)
+```
+
+**Cause**: `start_seed=1000` + `num_scenarios=1000` → seeds [1000:2000). Ray generates seeds that exceed this range.
+
+**Fix**: Add `--start-seed 0` to all commands above **OR** update `build_env_config` in `env.py`:
+```python
+base = {
+    ...
+    "start_seed": 0,  # Changed from 1000
+    "num_scenarios": 10000,  # Much larger range
+}
+```
+This prevents the `scenario_index` assertion errors. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/156962582/ef362c68-1042-478d-8b2e-59c624417b86/env.py)
+
+Run Stage 1 first—expect rewards to climb from ~-400 to positive after ~20-50 iters! [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/156962582/64ead20d-79ef-43f1-b961-98bb7a1b5699/paste.txt)

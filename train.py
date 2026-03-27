@@ -50,7 +50,7 @@ def _ckpt_path_str(ckpt_obj: Any) -> str:
 
 
 def build_algo_config(args: argparse.Namespace) -> PPOConfig:
-    env_config = build_env_config(args.num_agents, args.render, stage=args.stage)    
+    env_config = build_env_config(args.num_agents, args.render, stage=args.stage) # env_name=args.env    
     env_config["env_name"] = args.env    
     print(
         f"[CONFIG] stage={args.stage} env={args.env} "
@@ -111,7 +111,7 @@ def parse_args() -> argparse.Namespace:
         "--env",
         type=str,
         default="roundabout",
-        choices=["roundabout", "intersection", "tollgate"],
+        choices=["roundabout", "intersection", "tollgate", "custom"],
         help="Which MetaDrive map to use"
     )
     p.add_argument("--resume", type=str, default=None, help="Path to a checkpoint to resume from")
@@ -136,14 +136,10 @@ def main() -> None:
 
     if args.resume:
         resume_path = os.path.abspath(args.resume)
-        print(f"Loading policy weights from checkpoint: {resume_path}")
-
-        prev = PPO.from_checkpoint(resume_path)
-
-        w = prev.get_policy("shared_policy").get_weights()
-        algo.get_policy("shared_policy").set_weights(w)
-
-        prev.stop()
+        print(f"Restoring full algorithm state from checkpoint: {resume_path}")
+        algo = PPO.from_checkpoint(resume_path)
+    else:
+        algo = build_algo_config(args).build()
     for it in range(1, args.stop_iters + 1):
         if _stop_training:
             print(f"\n🛑 Stopping at iteration {it-1}")
